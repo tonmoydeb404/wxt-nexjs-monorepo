@@ -2,13 +2,15 @@ import { defineConfig } from "wxt"
 
 // See https://wxt.dev/api/config.html
 export default defineConfig({
+  srcDir: "src",
   modules: ["@wxt-dev/module-react"],
   manifest: {
-    name: "Extension Name",
-    description: "A short description of what your extension does.",
+    name: "FB Mention All",
+    description: "Mention everyone who commented on a Facebook post.",
     permissions: ["storage"],
+    host_permissions: ["*://*.facebook.com/*"],
     action: {
-      default_title: "Extension Name",
+      default_title: "FB Mention All",
     },
   },
 })

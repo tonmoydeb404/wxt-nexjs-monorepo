@@ -2,7 +2,7 @@ import "@workspace/ui/globals.css"
 import React from "react"
 import ReactDOM from "react-dom/client"
 
-import { App } from "./app"
+import { PopupView } from "@/views/popup"
 
 // Apply dark mode class based on system preference
 function applyDarkMode() {
@@ -15,8 +15,11 @@ window
   .matchMedia("(prefers-color-scheme: dark)")
   .addEventListener("change", applyDarkMode)
 
-ReactDOM.createRoot(document.getElementById("root")!).render(
+const root = document.getElementById("root")
+if (!root) throw new Error("Missing #root element")
+
+ReactDOM.createRoot(root).render(
   <React.StrictMode>
-    <App />
+    <PopupView />
   </React.StrictMode>
 )

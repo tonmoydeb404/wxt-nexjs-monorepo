@@ -4,6 +4,8 @@
     "allowImportingTsExtensions": true,
     "jsx": "react-jsx",
     "paths": {
+      "@": ["./src"],
+      "@/*": ["./src/*"],
       "@workspace/ui/*": ["../../packages/ui/src/*"]
     }
   }

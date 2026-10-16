@@ -12,7 +12,7 @@ export default [
   {
     // WXT entrypoints (background.ts, content.ts, ...) are framework-mandated
     // to default-export the result of defineBackground/defineContentScript/etc.
-    files: ["entrypoints/**/*.ts"],
+    files: ["src/entrypoints/**/*.ts"],
     rules: {
       "import-x/no-default-export": "off",
     },

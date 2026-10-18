@@ -5,13 +5,19 @@ import { Input } from "@workspace/ui/components/input"
 import { Slider } from "@workspace/ui/components/slider"
 import { Textarea } from "@workspace/ui/components/textarea"
 
-import { DEFAULT_SETTINGS, settingsItem, type Settings } from "@/lib"
+import {
+  DEFAULT_SETTINGS,
+  getSettings,
+  resetAllMentioned,
+  settingsItem,
+  type Settings,
+} from "@/lib"
 
 export function PopupView() {
   const [settings, setSettings] = useState<Settings>(DEFAULT_SETTINGS)
 
   useEffect(() => {
-    settingsItem.getValue().then(setSettings)
+    getSettings().then(setSettings)
   }, [])
 
   function update(patch: Partial<Settings>) {
@@ -28,6 +34,54 @@ export function PopupView() {
           Open a Facebook post and press the Mention all commenters button.
         </p>
       </header>
+
+      <div className="flex flex-col gap-2 text-sm">
+        Mode
+        <div className="flex gap-2">
+          <Button
+            className="flex-1"
+            variant={settings.mode === "auto" ? "default" : "outline"}
+            onClick={() => update({ mode: "auto" })}
+          >
+            Auto expand
+          </Button>
+          <Button
+            className="flex-1"
+            variant={settings.mode === "manual" ? "default" : "outline"}
+            onClick={() => update({ mode: "manual" })}
+          >
+            Manual
+          </Button>
+        </div>
+        <p className="text-xs text-muted-foreground">
+          {settings.mode === "auto"
+            ? "Opens more comments for you until enough people are found."
+            : "Only uses the comments you have already expanded."}
+        </p>
+      </div>
+
+      <label className="flex items-center gap-2 text-sm">
+        <input
+          type="checkbox"
+          checked={settings.includeReplies}
+          onChange={(e) => update({ includeReplies: e.target.checked })}
+        />
+        Include people who replied
+      </label>
+
+      {settings.mode === "auto" && (
+        <label className="flex flex-col gap-2 text-sm">
+          Max people to collect
+          <Input
+            type="number"
+            min={1}
+            value={settings.maxCollect}
+            onChange={(e) =>
+              update({ maxCollect: Number(e.target.value) || 100 })
+            }
+          />
+        </label>
+      )}
 
       <label className="flex flex-col gap-2 text-sm">
         Batch size: {settings.batchSize}
@@ -76,6 +130,9 @@ export function PopupView() {
 
       <Button variant="outline" onClick={() => update(DEFAULT_SETTINGS)}>
         Reset to defaults
+      </Button>
+      <Button variant="outline" onClick={() => void resetAllMentioned()}>
+        Forget everyone mentioned (all posts)
       </Button>
     </div>
   )

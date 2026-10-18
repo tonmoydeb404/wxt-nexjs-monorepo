@@ -10,7 +10,8 @@
     "format": "turbo format",
     "typecheck": "turbo typecheck",
     "knip": "knip",
-    "knip:fix": "knip --fix"
+    "knip:fix": "knip --fix",
+    "extension": "pnpm --filter @workspace/extension"
   },
   "devDependencies": {
     "@workspace/eslint-config": "workspace:*",

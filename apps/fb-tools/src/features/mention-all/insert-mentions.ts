@@ -16,8 +16,15 @@ function normalizeText(text: string | null | undefined) {
   return (text ?? "").replace(/\s+/g, " ").trim().toLowerCase()
 }
 
+// Wait for the typeahead row for this person. Rows are tagged with the
+// person's user id (<li id="1000…">), which equals the id in their profile
+// link, so an id match always selects exactly the right person — even when
+// several people share a display name. Without an id, compare on normalized
+// text (rows show display names plus optional subtitles even when a slug was
+// typed).
 async function waitForOption(
   expectedName: string,
+  expectedUserId: string | null,
   requireMatch: boolean,
   signal?: AbortSignal
 ) {
@@ -27,6 +34,10 @@ async function waitForOption(
     const options = Array.from(
       document.querySelectorAll<HTMLElement>(TYPEAHEAD_OPTION_SELECTOR)
     )
+    if (expectedUserId) {
+      const byId = options.find((o) => o.id === expectedUserId)
+      if (byId) return byId
+    }
     const texts = options.map((o) => normalizeText(o.textContent))
     const exact = texts.indexOf(wanted)
     const partial = texts.findIndex((text) => text.startsWith(wanted))
@@ -117,12 +128,14 @@ export async function insertMentions(
       stopped = true
       break
     }
-    // No slug (profile.php?id=… and friends) means there is no "@handle":
-    // type the display name and trust only a matching suggestion.
+    // No slug (profile.php?id=…, /people/…, group member links) means there is
+    // no "@handle": type the display name and let the typeahead's <li id> (or,
+    // failing that, an exact name match) pick the right person.
     const handle = commenter.username ?? commenter.name
     typeText(editor, `@${handle}`)
     const option = await waitForOption(
       commenter.name,
+      commenter.userId,
       commenter.username == null,
       signal
     )

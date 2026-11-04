@@ -10,9 +10,14 @@ import {
 export type Commenter = {
   name: string
   // Profile slug, e.g. "nagibmahfuzneloy" from facebook.com/nagibmahfuzneloy.
-  // null when the profile link is id-based (profile.php?id=… or
-  // /people/<name>/<id>/): those people are mentioned by display name instead.
+  // null when the profile link is id-based (profile.php?id=…, /people/… or
+  // /groups/<gid>/user/<id>/): those people are mentioned by display name.
   username: string | null
+  // Numeric user id from an id-based profile link. The mention typeahead tags
+  // each suggestion <li> with this exact id, so matching on it pins the right
+  // person even when several people share a display name. null for slug-based
+  // profiles, where the typed slug is already unambiguous.
+  userId: string | null
   // Stable identity (id:<uid> or the profile path) used for dedupe and
   // "already mentioned" bookkeeping, because username can be missing.
   key: string
@@ -101,13 +106,15 @@ const NON_SLUG_PATHS = new Set([
   "watch",
 ])
 
-type Profile = { key: string; username: string | null }
+type Profile = { key: string; username: string | null; userId: string | null }
 
-// What a profile link tells us: a dedupe key and, when it exists, the vanity
-// slug usable as "@slug". Group posts link authors through id-based URLs
-// (profile.php?id=…, /people/<name>/<id>/) that carry no slug, so those stay
-// valid profiles with username: null. Returns null for everything else
-// (comment permalinks, group pages, photos…).
+// What a profile link tells us: a dedupe key, the numeric user id when the
+// link is id-shaped (so the typeahead row can be matched by its <li id>), and
+// the vanity slug when one exists. Group posts link authors through
+// /groups/<gid>/user/<id>/ — that id is the real user id (it equals the
+// typeahead row id) but carries no slug, so those people stay valid profiles
+// with username: null. Returns null for everything else (comment permalinks,
+// group pages, photos…).
 function parseProfileHref(href: string): Profile | null {
   let url: URL
   try {
@@ -117,7 +124,7 @@ function parseProfileHref(href: string): Profile | null {
   }
   const id = url.searchParams.get("id")
   if (url.pathname === "/profile.php" && id) {
-    return { key: `id:${id}`, username: null }
+    return { key: `id:${id}`, username: null, userId: id }
   }
   const segments = url.pathname.split("/").filter(Boolean)
   // Modern form for profiles without a slug: /people/<name>/<id>/.
@@ -126,7 +133,17 @@ function parseProfileHref(href: string): Profile | null {
     segments.length === 3 &&
     /^\d+$/.test(segments[2])
   ) {
-    return { key: `id:${segments[2]}`, username: null }
+    return { key: `id:${segments[2]}`, username: null, userId: segments[2] }
+  }
+  // Group-scoped member link: /groups/<groupId|vanity>/user/<userId>/. The
+  // group id segment can be a vanity slug, so only the user id is validated.
+  if (
+    segments.length === 4 &&
+    segments[0] === "groups" &&
+    segments[2] === "user" &&
+    /^\d+$/.test(segments[3])
+  ) {
+    return { key: `id:${segments[3]}`, username: null, userId: segments[3] }
   }
   if (segments.length !== 1) return null
   const slug = segments[0]
@@ -134,10 +151,14 @@ function parseProfileHref(href: string): Profile | null {
   // A system script, hashtag target or numeric object id still identifies the
   // person for dedupe, but there is no "@handle" to type for them.
   if (lower.endsWith(".php") || lower.startsWith("#") || /^\d+$/.test(lower)) {
-    return { key: url.pathname.replace(/\/$/, ""), username: null }
+    return {
+      key: url.pathname.replace(/\/$/, ""),
+      username: null,
+      userId: null,
+    }
   }
   if (NON_SLUG_PATHS.has(lower)) return null
-  return { key: url.pathname.replace(/\/$/, ""), username: slug }
+  return { key: url.pathname.replace(/\/$/, ""), username: slug, userId: null }
 }
 
 // A reply is labelled "Reply by …" or sits inside another comment's article.
@@ -195,6 +216,7 @@ function commentersFrom(
       seen.set(author.profile.key, {
         name,
         username: author.profile.username,
+        userId: author.profile.userId,
         key: author.profile.key,
         profileUrl: author.link.href,
         isReply,

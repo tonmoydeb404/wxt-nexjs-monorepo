@@ -12,7 +12,15 @@ export function SignInRequiredView() {
           Sign in to start mentioning everyone in the comments.
         </p>
       </header>
-      <SignIn appearance={isDark ? { theme: dark } : undefined} />
+      <SignIn
+        appearance={{
+          ...(isDark ? { theme: dark } : {}),
+          elements: {
+            // Invite-only: hide clerk's "Don't have an account? Sign up".
+            footerAction: "hidden",
+          },
+        }}
+      />
       <p className="text-center text-xs text-muted-foreground">
         Access is invite-only. Sign in with the email your account was created
         with.

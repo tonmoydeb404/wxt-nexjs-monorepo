@@ -4,6 +4,9 @@ import { defineConfig } from "wxt"
 export default defineConfig({
   srcDir: "src",
   modules: ["@wxt-dev/module-react", "@wxt-dev/auto-icons"],
+  zip: {
+    name: "fb-tools",
+  },
   manifest: {
     name: "FB Mention All",
     description: "Mention everyone who commented on a Facebook post.",

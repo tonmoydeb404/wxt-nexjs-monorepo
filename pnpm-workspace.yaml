@@ -3,6 +3,9 @@ packages:
   - "packages/*"
 
 allowBuilds:
+  '@clerk/shared': true
+  browser-tabs-lock: true
+  core-js: true
   esbuild: true
   msw: false
   sharp: true

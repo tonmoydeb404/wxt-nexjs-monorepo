@@ -21,38 +21,46 @@ function normalizeText(text: string | null | undefined) {
 // link, so an id match always selects exactly the right person — even when
 // several people share a display name. Without an id, compare on normalized
 // text (rows show display names plus optional subtitles even when a slug was
-// typed).
+// typed). Also reports whether any row appeared at all, which tells a skip
+// apart: no rows means Facebook doesn't make the person mentionable here,
+// rows-but-no-match means an id or name mismatch.
 async function waitForOption(
   expectedName: string,
   expectedUserId: string | null,
   requireMatch: boolean,
   signal?: AbortSignal
-) {
+): Promise<{ option: HTMLElement | null; sawAnyRow: boolean }> {
   const deadline = Date.now() + TYPEAHEAD_TIMEOUT_MS
   const wanted = normalizeText(expectedName)
+  let sawAnyRow = false
   while (Date.now() < deadline && !signal?.aborted) {
     const options = Array.from(
       document.querySelectorAll<HTMLElement>(TYPEAHEAD_OPTION_SELECTOR)
     )
+    if (options.length > 0) sawAnyRow = true
     if (expectedUserId) {
       const byId = options.find((o) => o.id === expectedUserId)
-      if (byId) return byId
+      if (byId) return { option: byId, sawAnyRow }
     }
     const texts = options.map((o) => normalizeText(o.textContent))
     const exact = texts.indexOf(wanted)
     const partial = texts.findIndex((text) => text.startsWith(wanted))
     const match =
       exact >= 0 ? options[exact] : partial >= 0 ? options[partial] : null
-    if (match) return match
+    if (match) return { option: match, sawAnyRow }
     await delay(150)
   }
-  if (signal?.aborted) return null
+  if (signal?.aborted) return { option: null, sawAnyRow }
   // A typed slug is precise, so Facebook's top suggestion is trustworthy even
   // when the row text doesn't literally contain the name. A typed display
   // name is ambiguous: never guess a person who doesn't match.
-  return requireMatch
-    ? null
-    : (document.querySelector<HTMLElement>(TYPEAHEAD_OPTION_SELECTOR) ?? null)
+  return {
+    option: requireMatch
+      ? null
+      : (document.querySelector<HTMLElement>(TYPEAHEAD_OPTION_SELECTOR) ??
+        null),
+    sawAnyRow,
+  }
 }
 
 // Enter selects the highlighted suggestion. Only call this while a suggestion
@@ -150,12 +158,41 @@ function eraseTypedHandle(editor: HTMLElement, handle: string) {
   return false
 }
 
+// The text before the caret, measured through the DOM so mention tokens count
+// the same way Facebook renders them.
+function textBeforeCaret(editor: HTMLElement) {
+  const selection = window.getSelection()
+  const range = selection?.rangeCount ? selection.getRangeAt(0) : null
+  if (!range || !editor.contains(range.startContainer)) return null
+  const fromStart = document.createRange()
+  fromStart.selectNodeContents(editor)
+  fromStart.setEnd(range.startContainer, range.startOffset)
+  return fromStart.toString()
+}
+
 // Mentions typed flush against other text glue onto it (and Facebook may not
-// even open the typeahead), so keep exactly one space before each one. After
-// a successful insert the trailing space already there makes this a no-op.
-function ensureTrailingSpace(editor: HTMLElement) {
-  const text = editor.textContent ?? ""
-  if (text.length === 0 || /\s$/.test(text)) return
+// even open the typeahead), so make sure the caret sits right after whitespace
+// or at the very start of the box before typing one. The check is at the
+// caret, not at the end of the box, so it also covers a caret the user left
+// mid-text.
+function ensureSpaceBeforeCaret(editor: HTMLElement) {
+  editor.focus()
+  const selection = window.getSelection()
+  const hasCaret =
+    selection != null &&
+    selection.rangeCount > 0 &&
+    editor.contains(selection.getRangeAt(0).startContainer)
+  if (!hasCaret) {
+    // No caret in the box: continue from its end.
+    const range = document.createRange()
+    range.selectNodeContents(editor)
+    range.collapse(false)
+    selection?.removeAllRanges()
+    selection?.addRange(range)
+  }
+  const before = textBeforeCaret(editor)
+  if (before === null) return
+  if (before.length === 0 || /\s$/.test(before)) return
   typeText(editor, " ")
 }
 
@@ -184,9 +221,18 @@ function prepareCaret(editor: HTMLElement, saved: Range | null) {
   if (text && !/\s$/.test(text)) typeText(editor, " ")
 }
 
+// Why a person wasn't mentioned.
+export type SkipReason =
+  // The typeahead never offered anyone: Facebook doesn't make this person
+  // mentionable from this account/context (e.g. a non-friend without a
+  // username on a normal post).
+  | "no-suggestions"
+  // Rows appeared, but none matched the person's id or name.
+  | "no-match"
+
 export type InsertResult = {
   inserted: number
-  skipped: string[]
+  skipped: { handle: string; reason: SkipReason }[]
   stopped: boolean
 }
 
@@ -205,7 +251,7 @@ export async function insertMentions(
 ): Promise<InsertResult> {
   let inserted = 0
   let stopped = false
-  const skipped: string[] = []
+  const skipped: { handle: string; reason: SkipReason }[] = []
   const signal = options.signal
 
   prepareCaret(editor, options.caret ?? null)
@@ -218,10 +264,10 @@ export async function insertMentions(
     // No slug (profile.php?id=…, /people/…, group member links) means there is
     // no "@handle": type the display name and let the typeahead's <li id> (or,
     // failing that, an exact name match) pick the right person.
-    ensureTrailingSpace(editor)
+    ensureSpaceBeforeCaret(editor)
     const handle = commenter.username ?? commenter.name
     typeText(editor, `@${handle}`)
-    const option = await waitForOption(
+    const { option, sawAnyRow } = await waitForOption(
       commenter.name,
       commenter.userId,
       commenter.username == null,
@@ -241,11 +287,15 @@ export async function insertMentions(
         stopped = true
         break
       }
-      skipped.push(handle)
+      const reason: SkipReason = sawAnyRow ? "no-match" : "no-suggestions"
+      skipped.push({ handle, reason })
       console.warn(
-        erased
-          ? `[fb-mention] skipped @${handle}`
-          : `[fb-mention] skipped @${handle} (couldn't remove it)`
+        `[fb-mention] skipped @${handle} (${
+          sawAnyRow
+            ? "rows appeared but none matched the id or name"
+            : "Facebook offered no suggestions; not mentionable from here"
+        })${erased ? "" : " — couldn't remove the typed text"}`,
+        commenter
       )
       continue
     }

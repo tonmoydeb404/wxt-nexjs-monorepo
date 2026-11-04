@@ -208,6 +208,20 @@ async function run(
       articles.map((a) => a.getAttribute("aria-label"))
     )
 
+    // Facebook only suggests people it lets you mention anyway: friends and
+    // people already in the conversation on normal posts, group members in
+    // groups. Commenters linked through id-only profiles (profile.php?id=…,
+    // /people/…) are usually non-friends, so on a non-group post warn before
+    // typing anything instead of surprising the user with skips.
+    const groupPost = /\/groups\//.test(location.pathname)
+    const slugless = everyone.filter((c) => c.username == null).length
+    if (!groupPost && slugless > 0) {
+      console.log(
+        `[fb-mention] ${slugless} of ${everyone.length} have no username; ` +
+          "Facebook may not suggest them on a normal post (they'd be skipped)"
+      )
+    }
+
     if (batch.length === 0) {
       console.log(
         "[fb-mention] no one to mention; comment cards in scope:",
@@ -235,6 +249,12 @@ async function run(
       return { remaining: everyone.length, batch: 0 }
     }
 
+    if (!groupPost && slugless > 0) {
+      setLabel(
+        `Mentioning ${batch.length}… (${slugless} without username may be skipped)`
+      )
+    }
+
     const result = await insertMentions(editor, batch, {
       getDelayMs: () => live.get().delayMs,
       caret,
@@ -246,10 +266,14 @@ async function run(
     })
 
     const remaining = everyone.length - result.inserted
+    const notSuggested = result.skipped.filter(
+      (s) => s.reason === "no-suggestions"
+    ).length
     setLabel(
       `${result.stopped ? "Stopped" : "Done"}: ${result.inserted} mentioned` +
         (result.skipped.length > 0
-          ? `, ${result.skipped.length} skipped`
+          ? `, ${result.skipped.length} skipped` +
+            (notSuggested > 0 ? ` (${notSuggested} not mentionable here)` : "")
           : "") +
         `, ${remaining} left.` +
         (result.inserted > 0 ? " Press Enter to post." : "")

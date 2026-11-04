@@ -10,7 +10,12 @@ import {
 export type Commenter = {
   name: string
   // Profile slug, e.g. "nagibmahfuzneloy" from facebook.com/nagibmahfuzneloy.
-  username: string
+  // null when the profile link is id-based (profile.php?id=… or
+  // /people/<name>/<id>/): those people are mentioned by display name instead.
+  username: string | null
+  // Stable identity (id:<uid> or the profile path) used for dedupe and
+  // "already mentioned" bookkeeping, because username can be missing.
+  key: string
   profileUrl: string
   isReply: boolean
 }
@@ -70,18 +75,69 @@ export async function expandComments(
   }
 }
 
-// Strip tracking params so the same person always maps to one key.
-function profileKey(href: string) {
-  const url = new URL(href, location.origin)
-  const id = url.searchParams.get("id")
-  return id ? `id:${id}` : url.pathname.replace(/\/$/, "")
-}
+// Facebook routes a single path segment could collide with; a vanity
+// username never shares one of these.
+const NON_SLUG_PATHS = new Set([
+  "friends",
+  "gaming",
+  "groups",
+  "hashtag",
+  "help",
+  "live",
+  "login",
+  "marketplace",
+  "media",
+  "pages",
+  "pg",
+  "photo",
+  "plugins",
+  "policies",
+  "privacy",
+  "public",
+  "reel",
+  "search",
+  "share",
+  "sold",
+  "watch",
+])
 
-function profileUsername(href: string) {
-  const url = new URL(href, location.origin)
-  const [slug, ...rest] = url.pathname.split("/").filter(Boolean)
-  if (!slug || rest.length > 0 || slug === "profile.php") return null
-  return slug
+type Profile = { key: string; username: string | null }
+
+// What a profile link tells us: a dedupe key and, when it exists, the vanity
+// slug usable as "@slug". Group posts link authors through id-based URLs
+// (profile.php?id=…, /people/<name>/<id>/) that carry no slug, so those stay
+// valid profiles with username: null. Returns null for everything else
+// (comment permalinks, group pages, photos…).
+function parseProfileHref(href: string): Profile | null {
+  let url: URL
+  try {
+    url = new URL(href, location.origin)
+  } catch {
+    return null
+  }
+  const id = url.searchParams.get("id")
+  if (url.pathname === "/profile.php" && id) {
+    return { key: `id:${id}`, username: null }
+  }
+  const segments = url.pathname.split("/").filter(Boolean)
+  // Modern form for profiles without a slug: /people/<name>/<id>/.
+  if (
+    segments[0] === "people" &&
+    segments.length === 3 &&
+    /^\d+$/.test(segments[2])
+  ) {
+    return { key: `id:${segments[2]}`, username: null }
+  }
+  if (segments.length !== 1) return null
+  const slug = segments[0]
+  const lower = slug.toLowerCase()
+  // A system script, hashtag target or numeric object id still identifies the
+  // person for dedupe, but there is no "@handle" to type for them.
+  if (lower.endsWith(".php") || lower.startsWith("#") || /^\d+$/.test(lower)) {
+    return { key: url.pathname.replace(/\/$/, ""), username: null }
+  }
+  if (NON_SLUG_PATHS.has(lower)) return null
+  return { key: url.pathname.replace(/\/$/, ""), username: slug }
 }
 
 // A reply is labelled "Reply by …" or sits inside another comment's article.
@@ -92,16 +148,32 @@ export function isReplyArticle(article: Element) {
   )
 }
 
-// The first link is the empty avatar and the timestamp link has an
-// aria-label, so the author is the first link with text and no label.
-function findAuthorLink(article: Element) {
-  return Array.from(
-    article.querySelectorAll<HTMLAnchorElement>("a[role='link']")
-  ).find((a) => !a.hasAttribute("aria-label") && a.textContent?.trim())
+// The author is a profile-shaped link, not any text link: comment permalinks
+// and timestamps don't qualify. Card order is avatar link (often empty and
+// just labelled with the name) then the name link; profile links inside the
+// comment text come later, so the first profile link with text wins and a
+// labelled avatar link is the fallback.
+type Author = { link: HTMLAnchorElement; profile: Profile }
+
+function findAuthor(article: Element): Author | null {
+  let labelled: Author | null = null
+  for (const link of article.querySelectorAll<HTMLAnchorElement>("a[href]")) {
+    const profile = parseProfileHref(link.href)
+    if (!profile) continue
+    if (link.textContent?.replace(/\s+/g, " ").trim()) return { link, profile }
+    if (!labelled && link.getAttribute("aria-label"))
+      labelled = { link, profile }
+  }
+  return labelled
 }
 
-function authorName(article: Element) {
-  return findAuthorLink(article)?.textContent?.replace(/\s+/g, " ").trim()
+// Visible name text first, then the avatar link's aria-label.
+function authorName(author: Author) {
+  return (
+    author.link.textContent?.replace(/\s+/g, " ").trim() ||
+    author.link.getAttribute("aria-label")?.replace(/\s+/g, " ").trim() ||
+    null
+  )
 }
 
 function commentersFrom(
@@ -114,16 +186,19 @@ function commentersFrom(
     const isReply = isReplyArticle(comment)
     if (isReply && !options.includeReplies) continue
 
-    const link = findAuthorLink(comment)
-    const name = link?.textContent?.replace(/\s+/g, " ").trim()
-    if (!link || !name) continue
-    // profile.php?id=… links have no username, so they can't be mentioned.
-    const username = profileUsername(link.href)
-    if (!username) continue
-    const key = profileKey(link.href)
+    const author = findAuthor(comment)
+    if (!author) continue
+    const name = authorName(author)
+    if (!name) continue
     // One entry per person, even if they commented and replied many times.
-    if (!seen.has(key)) {
-      seen.set(key, { name, username, profileUrl: link.href, isReply })
+    if (!seen.has(author.profile.key)) {
+      seen.set(author.profile.key, {
+        name,
+        username: author.profile.username,
+        key: author.profile.key,
+        profileUrl: author.link.href,
+        isReply,
+      })
     }
   }
 
@@ -189,7 +264,10 @@ export function findReplyContext(editor: HTMLElement) {
   let node = editor.parentElement
   while (node) {
     const authored = Array.from(node.querySelectorAll(COMMENT_SELECTOR)).filter(
-      (article) => authorName(article) === name
+      (article) => {
+        const author = findAuthor(article)
+        return author != null && authorName(author) === name
+      }
     )
     if (authored.length > 0) {
       const before = authored.filter(
@@ -235,7 +313,7 @@ export function filterCommenters(
     return (
       !excluded.has(name) &&
       name !== self &&
-      !options.mentioned.has(c.username) &&
+      !options.mentioned.has(c.key) &&
       !editorText.includes(name)
     )
   })

@@ -1,3 +1,4 @@
+import { UserButton } from "@clerk/chrome-extension"
 import { useEffect, useState } from "react"
 
 import { Button } from "@workspace/ui/components/button"
@@ -13,7 +14,7 @@ import {
   type Settings,
 } from "@/lib"
 
-export function PopupView() {
+export function SettingsView() {
   const [settings, setSettings] = useState<Settings>(DEFAULT_SETTINGS)
 
   useEffect(() => {
@@ -28,11 +29,14 @@ export function PopupView() {
 
   return (
     <div className="flex w-full flex-col gap-4 p-4">
-      <header>
-        <h1 className="font-heading text-lg font-medium">FB Mention All</h1>
-        <p className="text-sm text-muted-foreground">
-          Open a Facebook post and press the Mention all commenters button.
-        </p>
+      <header className="flex items-start justify-between gap-2">
+        <div>
+          <h1 className="font-heading text-lg font-medium">FB Mention All</h1>
+          <p className="text-sm text-muted-foreground">
+            Open a Facebook post and press the Mention all commenters button.
+          </p>
+        </div>
+        <UserButton />
       </header>
 
       <div className="flex flex-col gap-2 text-sm">
@@ -103,7 +107,9 @@ export function PopupView() {
           min={300}
           step={100}
           value={settings.delayMs}
-          onChange={(e) => update({ delayMs: Number(e.target.value) || 1200 })}
+          onChange={(e) =>
+            update({ delayMs: Number(e.target.value) || 1200 })
+          }
         />
       </label>
 

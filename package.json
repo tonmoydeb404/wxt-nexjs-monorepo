@@ -11,7 +11,7 @@
     "typecheck": "turbo typecheck",
     "knip": "knip",
     "knip:fix": "knip --fix",
-    "extension": "pnpm --filter @workspace/extension"
+    "fb-tools": "pnpm --filter @workspace/fb-tools"
   },
   "devDependencies": {
     "@workspace/eslint-config": "workspace:*",

@@ -11,7 +11,7 @@ This version has breaking changes — APIs, conventions, and file structure may 
 pnpm + Turborepo workspace. Node >= 20.
 
 - `apps/web` — Next.js 16.2.6 app (App Router, React 19)
-- `apps/extension` — WXT + React browser extension
+- `apps/fb-tools` — WXT + React browser extension
 - `packages/ui` — `@workspace/ui`, shadcn components (style: `base-maia`)
 - `packages/eslint-config` — shared ESLint flat configs
 - `packages/typescript-config` — shared tsconfig presets
@@ -26,8 +26,8 @@ pnpm --filter web typecheck      # tsc --noEmit
 pnpm --filter web lint           # eslint
 pnpm --filter web build          # next build
 pnpm --filter web format         # prettier --write
-pnpm --filter extension lint     # eslint (extension)
-pnpm --filter extension compile  # tsc --noEmit (extension)
+pnpm --filter fb-tools lint     # eslint (extension)
+pnpm --filter fb-tools compile  # tsc --noEmit (extension)
 ```
 
 Always run typecheck + lint + build after changes. There is no test suite.
@@ -72,8 +72,8 @@ No semicolons. Double quotes. Trailing comma: es5. 2-space indent.
 # Conventions
 
 These are enforced by ESLint in `packages/eslint-config` (base.js/next.js) for
-`apps/web` and `packages/ui`, and via `apps/extension/eslint.config.js` for
-`apps/extension`, wherever practical.
+`apps/web` and `packages/ui`, and via `apps/fb-tools/eslint.config.js` for
+`apps/fb-tools`, wherever practical.
 
 1. **File names must be kebab-case** (`layout-header.tsx`, `site-config.ts`).
    Enforced by `unicorn/filename-case`.
@@ -99,7 +99,7 @@ These are enforced by ESLint in `packages/eslint-config` (base.js/next.js) for
        sections/
        components/   (optional)
    ```
-   Applies to both `apps/web` (App Router routes) and `apps/extension`
+   Applies to both `apps/web` (App Router routes) and `apps/fb-tools`
    (entrypoint UIs, e.g. popup).
 6. **Prefer named exports over default exports.** Enforced by
    `import-x/no-default-export`. Exceptions (framework-mandated default

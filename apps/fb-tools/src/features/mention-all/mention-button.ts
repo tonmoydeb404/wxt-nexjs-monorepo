@@ -209,6 +209,17 @@ async function run(
     )
 
     if (batch.length === 0) {
+      console.log(
+        "[fb-mention] no one to mention; comment cards in scope:",
+        articles.map((article) => ({
+          label: article.getAttribute("aria-label"),
+          hrefs: Array.from(
+            article.querySelectorAll<HTMLAnchorElement>("a[href]")
+          )
+            .map((link) => link.getAttribute("href"))
+            .slice(0, 8),
+        }))
+      )
       setLabel(
         mentioned.size > 0
           ? "Everyone is already mentioned"
@@ -229,7 +240,7 @@ async function run(
       caret,
       signal,
       onInserted: async (commenter, done) => {
-        await addMentioned(postKey, commenter.username)
+        await addMentioned(postKey, commenter.key)
         setLabel(`Mentioning ${done}/${batch.length}…`)
       },
     })

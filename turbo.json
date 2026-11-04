@@ -15,9 +15,12 @@
         "!.next/cache/**"
       ]
     },
-    "@workspace/extension#build": {
+    "@workspace/fb-tools#build": {
       "dependsOn": [
         "^build"
+      ],
+      "env": [
+        "VITE_CLERK_PUBLISHABLE_KEY"
       ],
       "outputs": [
         ".output/**"

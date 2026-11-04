@@ -1,8 +1,10 @@
 import "@workspace/ui/globals.css"
+import { ClerkProvider } from "@clerk/chrome-extension"
 import React from "react"
 import ReactDOM from "react-dom/client"
 
 import { PopupView } from "@/views/popup"
+import { SetupRequiredView } from "@/views/popup/components"
 
 // Apply dark mode class based on system preference
 function applyDarkMode() {
@@ -18,8 +20,16 @@ window
 const root = document.getElementById("root")
 if (!root) throw new Error("Missing #root element")
 
+const publishableKey = import.meta.env.VITE_CLERK_PUBLISHABLE_KEY
+
 ReactDOM.createRoot(root).render(
   <React.StrictMode>
-    <PopupView />
+    {publishableKey ? (
+      <ClerkProvider publishableKey={publishableKey}>
+        <PopupView />
+      </ClerkProvider>
+    ) : (
+      <SetupRequiredView />
+    )}
   </React.StrictMode>
 )

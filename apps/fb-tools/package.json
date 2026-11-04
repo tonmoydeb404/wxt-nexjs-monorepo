@@ -1,5 +1,5 @@
 {
-  "name": "@workspace/extension",
+  "name": "@workspace/fb-tools",
   "description": "Browser extension built with WXT and React.",
   "private": true,
   "version": "0.0.0",
@@ -16,6 +16,8 @@
     "postinstall": "wxt prepare"
   },
   "dependencies": {
+    "@clerk/chrome-extension": "^3.1.104",
+    "@clerk/themes": "^2.4.57",
     "@workspace/ui": "workspace:*",
     "react": "^19.2.4",
     "react-dom": "^19.2.4"

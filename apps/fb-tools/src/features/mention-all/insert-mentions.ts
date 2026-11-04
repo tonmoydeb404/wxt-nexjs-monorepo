@@ -10,16 +10,38 @@ function typeText(editor: HTMLElement, text: string) {
   document.execCommand("insertText", false, text)
 }
 
-async function waitForOption(signal?: AbortSignal) {
+// Typeahead rows show display names (plus optional subtitles) even when a
+// slug was typed, so compare on normalized text.
+function normalizeText(text: string | null | undefined) {
+  return (text ?? "").replace(/\s+/g, " ").trim().toLowerCase()
+}
+
+async function waitForOption(
+  expectedName: string,
+  requireMatch: boolean,
+  signal?: AbortSignal
+) {
   const deadline = Date.now() + TYPEAHEAD_TIMEOUT_MS
+  const wanted = normalizeText(expectedName)
   while (Date.now() < deadline && !signal?.aborted) {
-    const option = document.querySelector<HTMLElement>(
-      TYPEAHEAD_OPTION_SELECTOR
+    const options = Array.from(
+      document.querySelectorAll<HTMLElement>(TYPEAHEAD_OPTION_SELECTOR)
     )
-    if (option) return option
+    const texts = options.map((o) => normalizeText(o.textContent))
+    const exact = texts.indexOf(wanted)
+    const partial = texts.findIndex((text) => text.startsWith(wanted))
+    const match =
+      exact >= 0 ? options[exact] : partial >= 0 ? options[partial] : null
+    if (match) return match
     await delay(150)
   }
-  return null
+  if (signal?.aborted) return null
+  // A typed slug is precise, so Facebook's top suggestion is trustworthy even
+  // when the row text doesn't literally contain the name. A typed display
+  // name is ambiguous: never guess a person who doesn't match.
+  return requireMatch
+    ? null
+    : (document.querySelector<HTMLElement>(TYPEAHEAD_OPTION_SELECTOR) ?? null)
 }
 
 // Enter selects the highlighted suggestion. Only call this while a suggestion
@@ -95,9 +117,15 @@ export async function insertMentions(
       stopped = true
       break
     }
-    const handle = commenter.username
+    // No slug (profile.php?id=… and friends) means there is no "@handle":
+    // type the display name and trust only a matching suggestion.
+    const handle = commenter.username ?? commenter.name
     typeText(editor, `@${handle}`)
-    const option = await waitForOption(signal)
+    const option = await waitForOption(
+      commenter.name,
+      commenter.username == null,
+      signal
+    )
     if (!option) {
       // Erase the half-typed "@handle" so it doesn't leak into the comment.
       for (let i = 0; i < handle.length + 1; i++) {

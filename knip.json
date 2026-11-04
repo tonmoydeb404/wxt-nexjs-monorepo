@@ -10,7 +10,7 @@
         "src/app/**/{page,layout,loading,error,not-found,opengraph-image,robots,sitemap}.tsx"
       ]
     },
-    "apps/extension": {},
+    "apps/fb-tools": {},
     "packages/ui": {
       "entry": [
         "src/components/**/*.tsx",

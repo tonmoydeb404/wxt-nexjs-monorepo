@@ -22,10 +22,20 @@ if (!root) throw new Error("Missing #root element")
 
 const publishableKey = import.meta.env.VITE_CLERK_PUBLISHABLE_KEY
 
+// Clerk redirects after sign-in/sign-up/sign-out. Chrome extensions have no
+// http urls, so point every fallback back at the popup itself, otherwise the
+// popup navigates to chrome-extension://<id>/ and shows ERR_FILE_NOT_FOUND.
+const extensionUrl = browser.runtime.getURL("/popup.html")
+
 ReactDOM.createRoot(root).render(
   <React.StrictMode>
     {publishableKey ? (
-      <ClerkProvider publishableKey={publishableKey}>
+      <ClerkProvider
+        publishableKey={publishableKey}
+        afterSignOutUrl={extensionUrl}
+        signInFallbackRedirectUrl={extensionUrl}
+        signUpFallbackRedirectUrl={extensionUrl}
+      >
         <PopupView />
       </ClerkProvider>
     ) : (

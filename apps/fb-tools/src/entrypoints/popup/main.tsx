@@ -34,7 +34,6 @@ ReactDOM.createRoot(root).render(
         publishableKey={publishableKey}
         afterSignOutUrl={extensionUrl}
         signInFallbackRedirectUrl={extensionUrl}
-        signUpFallbackRedirectUrl={extensionUrl}
       >
         <PopupView />
       </ClerkProvider>

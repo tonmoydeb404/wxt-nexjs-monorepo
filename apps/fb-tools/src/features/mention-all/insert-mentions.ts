@@ -16,18 +16,21 @@ function normalizeText(text: string | null | undefined) {
   return (text ?? "").replace(/\s+/g, " ").trim().toLowerCase()
 }
 
-// Wait for the typeahead row for this person. Rows are tagged with the
-// person's user id (<li id="1000…">), which equals the id in their profile
-// link, so an id match always selects exactly the right person — even when
-// several people share a display name. Without an id, compare on normalized
-// text (rows show display names plus optional subtitles even when a slug was
-// typed). Also reports whether any row appeared at all, which tells a skip
-// apart: no rows means Facebook doesn't make the person mentionable here,
-// rows-but-no-match means an id or name mismatch.
+// Wait for the typeahead row that verifiably identifies this person, in one
+// of two strict modes:
+// - id mode (expectedUserId set): the row must be tagged with the person's
+//   user id (<li id="1000…">, the same id as in their profile link). A name
+//   that merely looks right is never accepted — a wrong mention is worse
+//   than a skipped one.
+// - slug mode (bySlug): the exact handle was typed; a name match confirms
+//   the row before trusting it, and after the timeout Facebook's top row is
+//   the entity the slug resolved to.
+// Also reports whether any row appeared at all, to tell "Facebook won't
+// suggest this person" apart from "no verifiable row".
 async function waitForOption(
   expectedName: string,
   expectedUserId: string | null,
-  requireMatch: boolean,
+  bySlug: boolean,
   signal?: AbortSignal
 ): Promise<{ option: HTMLElement | null; sawAnyRow: boolean }> {
   const deadline = Date.now() + TYPEAHEAD_TIMEOUT_MS
@@ -38,27 +41,29 @@ async function waitForOption(
       document.querySelectorAll<HTMLElement>(TYPEAHEAD_OPTION_SELECTOR)
     )
     if (options.length > 0) sawAnyRow = true
-    if (expectedUserId) {
+    if (expectedUserId != null) {
+      // Id mode: only the row tagged with this person's id verifies them.
       const byId = options.find((o) => o.id === expectedUserId)
       if (byId) return { option: byId, sawAnyRow }
+    } else {
+      // Slug mode: confirm the row shows the person before trusting it.
+      const texts = options.map((o) => normalizeText(o.textContent))
+      const exact = texts.indexOf(wanted)
+      const partial = texts.findIndex((text) => text.startsWith(wanted))
+      const match =
+        exact >= 0 ? options[exact] : partial >= 0 ? options[partial] : null
+      if (match) return { option: match, sawAnyRow }
     }
-    const texts = options.map((o) => normalizeText(o.textContent))
-    const exact = texts.indexOf(wanted)
-    const partial = texts.findIndex((text) => text.startsWith(wanted))
-    const match =
-      exact >= 0 ? options[exact] : partial >= 0 ? options[partial] : null
-    if (match) return { option: match, sawAnyRow }
     await delay(150)
   }
   if (signal?.aborted) return { option: null, sawAnyRow }
-  // A typed slug is precise, so Facebook's top suggestion is trustworthy even
-  // when the row text doesn't literally contain the name. A typed display
-  // name is ambiguous: never guess a person who doesn't match.
+  // Slug-mode timeout: the typed handle is precise, so Facebook's top
+  // suggestion is the entity it resolved to. Id mode has no fallback —
+  // without the id row there is no verified person to mention.
   return {
-    option: requireMatch
-      ? null
-      : (document.querySelector<HTMLElement>(TYPEAHEAD_OPTION_SELECTOR) ??
-        null),
+    option: bySlug
+      ? (document.querySelector<HTMLElement>(TYPEAHEAD_OPTION_SELECTOR) ?? null)
+      : null,
     sawAnyRow,
   }
 }
@@ -223,12 +228,15 @@ function prepareCaret(editor: HTMLElement, saved: Range | null) {
 
 // Why a person wasn't mentioned.
 export type SkipReason =
+  // The profile link carried neither a slug nor a user id, so the typed
+  // display name is all we have and identity can't be verified.
+  | "no-id"
   // The typeahead never offered anyone: Facebook doesn't make this person
   // mentionable from this account/context (e.g. a non-friend without a
   // username on a normal post).
   | "no-suggestions"
-  // Rows appeared, but none matched the person's id or name.
-  | "no-match"
+  // Rows appeared, but none carried the person's id, so nobody was verified.
+  | "no-id-row"
 
 export type InsertResult = {
   inserted: number
@@ -261,16 +269,30 @@ export async function insertMentions(
       stopped = true
       break
     }
+    // Identity must be verifiable before typing anything: a slug resolves
+    // through Facebook itself, an id pins the exact typeahead row. With
+    // neither, only an unverified display name would be typed — a wrong
+    // mention is worse than a skipped one.
+    if (commenter.username == null && commenter.userId == null) {
+      skipped.push({ handle: commenter.name, reason: "no-id" })
+      console.warn(
+        `[fb-mention] skipped @${commenter.name} — profile link had no slug or id, identity can't be verified`,
+        commenter
+      )
+      continue
+    }
+
     // No slug (profile.php?id=…, /people/…, group member links) means there is
-    // no "@handle": type the display name and let the typeahead's <li id> (or,
-    // failing that, an exact name match) pick the right person.
+    // no "@handle": type the display name and let the typeahead's <li id>
+    // pick exactly the right person.
     ensureSpaceBeforeCaret(editor)
     const handle = commenter.username ?? commenter.name
+    const bySlug = commenter.username != null
     typeText(editor, `@${handle}`)
     const { option, sawAnyRow } = await waitForOption(
       commenter.name,
       commenter.userId,
-      commenter.username == null,
+      bySlug,
       signal
     )
     if (!option) {
@@ -287,12 +309,14 @@ export async function insertMentions(
         stopped = true
         break
       }
-      const reason: SkipReason = sawAnyRow ? "no-match" : "no-suggestions"
+      const reason: SkipReason = sawAnyRow
+        ? "no-id-row"
+        : "no-suggestions"
       skipped.push({ handle, reason })
       console.warn(
         `[fb-mention] skipped @${handle} (${
           sawAnyRow
-            ? "rows appeared but none matched the id or name"
+            ? "rows appeared but none carried their id"
             : "Facebook offered no suggestions; not mentionable from here"
         })${erased ? "" : " — couldn't remove the typed text"}`,
         commenter

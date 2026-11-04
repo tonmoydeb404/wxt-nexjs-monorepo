@@ -18,13 +18,21 @@ type ClerkClient = Awaited<ReturnType<typeof createClerkClient>>
 let clerkPromise: Promise<ClerkClient> | null = null
 
 // A single Clerk instance for the service worker. The background:true option
-// lets it refresh the session token even when the popup is closed.
-async function getClerk(): Promise<ClerkClient> {
+// lets it refresh the session token even when the popup is closed. A failed
+// init (e.g. before the user ever signed in) must not be cached forever, so
+// the promise is dropped on rejection and the next call retries.
+function getClerk(): Promise<ClerkClient> {
   if (!clerkPromise) {
     if (!publishableKey) {
       throw new Error("Missing VITE_CLERK_PUBLISHABLE_KEY")
     }
-    clerkPromise = createClerkClient({ publishableKey, background: true })
+    clerkPromise = createClerkClient({
+      publishableKey,
+      background: true,
+    }).catch((error) => {
+      clerkPromise = null
+      throw error
+    })
   }
   return clerkPromise
 }

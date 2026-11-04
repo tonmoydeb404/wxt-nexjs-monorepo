@@ -11,7 +11,7 @@ export default defineConfig({
     // origin stays stable and can be allowlisted in the Clerk dashboard
     // (chrome-extension://edabcjlpjadjfadggegplpfnfnmmcmpf).
     key: "MIIBIjANBgkqhkiG9w0BAQEFAAOCAQ8AMIIBCgKCAQEAt/wFjplwYJyBAK6gsqdKUPyWhqt55VfgIZRM9yURihe+cR3iSwGiobGCVtKhGuArj8O27YNtJGGJJU1j/EWkr5LGDdhQGfEhh5hcvERmWCLzlMzC0XKPM0kJzM2NLepj9R+kpZEwuJyIJpyAEHX4akbyWrS5ppsfEZkC4FC1/07Ld0O9Nsa+zwfHEIIC2UHLkvqf1505C+sBP6U9MTb356Vr1x5ybDUOZjW5+MvL06/Qh17FhJLsLH/Vz6cDasMbpuFwsezS69HkBuvlMr4iWzMOvNFFPNxLqptIpgzF5dzWvRrc+/UAlytfPbfSNAf1AFYF9caGdBYzwy8hLvFL/wIDAQAB",
-    permissions: ["storage", "alarms"],
+    permissions: ["storage", "alarms", "cookies"],
     host_permissions: ["*://*.facebook.com/*"],
     action: {
       default_title: "FB Mention All",

@@ -14,6 +14,8 @@ export type AccessState = {
   signedIn: boolean
   enabled: boolean
   userId: string | null
+  // Why access is disabled, if it is.
+  blocked: "revoked" | "device" | null
 }
 
 // Last known state, so any context can read it without a live Clerk check.

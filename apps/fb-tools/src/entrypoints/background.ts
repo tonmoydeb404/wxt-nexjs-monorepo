@@ -5,6 +5,8 @@ import {
   ACCESS_CHECK_INTERVAL_MINUTES,
   DEFAULT_SETTINGS,
   accessStateItem,
+  ensureDeviceClaimed,
+  isDeviceAllowed,
   isExtensionEnabled,
   isGetAccessStateMessage,
   settingsItem,
@@ -39,21 +41,27 @@ function getClerk(): Promise<ClerkClient> {
 
 async function getAccessState(): Promise<AccessState> {
   if (!publishableKey) {
-    return { signedIn: false, enabled: false, userId: null }
+    return { signedIn: false, enabled: false, blocked: null, userId: null }
   }
   try {
     const clerk = await getClerk()
     if (!clerk.session || !clerk.user) {
-      return { signedIn: false, enabled: false, userId: null }
+      return { signedIn: false, enabled: false, blocked: null, userId: null }
     }
+    // Bind the account to this browser profile if no device is claimed yet.
+    await ensureDeviceClaimed(clerk.user)
+    const allowed = await isDeviceAllowed(clerk.user.unsafeMetadata)
+    const revoked = !isExtensionEnabled(clerk.user.publicMetadata)
+    const blocked = allowed ? (revoked ? "revoked" : null) : "device"
     return {
       signedIn: true,
-      enabled: isExtensionEnabled(clerk.user.publicMetadata),
+      enabled: blocked === null,
+      blocked,
       userId: clerk.user.id,
     }
   } catch (error) {
     console.error("[background] Failed to resolve access state:", error)
-    return { signedIn: false, enabled: false, userId: null }
+    return { signedIn: false, enabled: false, blocked: null, userId: null }
   }
 }
 
@@ -66,6 +74,7 @@ async function refreshAccessState() {
   if (
     previous?.signedIn !== next.signedIn ||
     previous?.enabled !== next.enabled ||
+    previous?.blocked !== next.blocked ||
     previous?.userId !== next.userId
   ) {
     await browser.runtime

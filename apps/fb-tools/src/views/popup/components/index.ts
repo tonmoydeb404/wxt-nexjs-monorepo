@@ -1,4 +1,5 @@
 export * from "./access-disabled"
+export * from "./device-blocked"
 export * from "./settings-view"
 export * from "./setup-required"
 export * from "./sign-in-required"

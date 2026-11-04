@@ -12,8 +12,8 @@ export function AccessDisabledView() {
       <header>
         <h1 className="font-heading text-lg font-medium">Access disabled</h1>
         <p className="text-sm text-muted-foreground">
-          {email ? `${email} no longer has access to FB Mention All. ` : ""}
-          Contact support if you think this is a mistake.
+          This account doesn&rsquo;t have access to FB Mention All yet.
+          Contact support to get access.
         </p>
       </header>
       <Button variant="outline" onClick={() => void clerk.signOut()}>

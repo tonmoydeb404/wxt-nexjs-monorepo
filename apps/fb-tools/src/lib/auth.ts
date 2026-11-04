@@ -6,8 +6,8 @@ import { storage } from "wxt/utils/storage"
 export const ACCESS_CHECK_ALARM = "check-access"
 export const ACCESS_CHECK_INTERVAL_MINUTES = 5
 
-// Clerk user public metadata key that gates extension usage. Set it to false
-// from the Clerk dashboard (Users -> user -> Public metadata) to disable a user.
+// Access is invite-only: a user can use the extension only when this flag is
+// explicitly set to true in their Clerk public metadata.
 export const EXTENSION_ACCESS_KEY = "extension_access"
 
 export type AccessState = {
@@ -31,11 +31,11 @@ export type AccessStateChangedMessage = {
   state: AccessState
 }
 
-// A user can use the extension unless the flag is explicitly set to false.
+// A user is disabled until their metadata explicitly grants access.
 export function isExtensionEnabled(
   publicMetadata: Record<string, unknown> | null | undefined,
 ): boolean {
-  return publicMetadata?.[EXTENSION_ACCESS_KEY] !== false
+  return publicMetadata?.[EXTENSION_ACCESS_KEY] === true
 }
 
 export function isGetAccessStateMessage(

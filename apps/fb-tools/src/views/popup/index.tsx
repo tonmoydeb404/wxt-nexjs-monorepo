@@ -18,16 +18,18 @@ function PopupLoading() {
 
 export function PopupView() {
   const { isLoaded, isSignedIn, user } = useUser()
-  const [deviceBlocked, setDeviceBlocked] = useState<boolean | null>(null)
+  // Result of the device check for a specific user id; stale results for
+  // other users are ignored during render.
+  const [deviceCheck, setDeviceCheck] = useState<{
+    userId: string
+    blocked: boolean
+  } | null>(null)
 
   useEffect(() => {
-    if (!isSignedIn || !user) {
-      setDeviceBlocked(null)
-      return
-    }
+    if (!isSignedIn || !user) return
     let cancelled = false
     void isDeviceAllowed(user.unsafeMetadata).then((allowed) => {
-      if (!cancelled) setDeviceBlocked(!allowed)
+      if (!cancelled) setDeviceCheck({ userId: user.id, blocked: !allowed })
     })
     return () => {
       cancelled = true
@@ -36,6 +38,8 @@ export function PopupView() {
 
   if (!isLoaded) return <PopupLoading />
   if (!isSignedIn || !user) return <SignInRequiredView />
+  const deviceBlocked =
+    deviceCheck && deviceCheck.userId === user.id ? deviceCheck.blocked : null
   if (deviceBlocked === null) return <PopupLoading />
   if (deviceBlocked) return <DeviceBlockedView />
   if (!isExtensionEnabled(user.publicMetadata)) return <AccessDisabledView />

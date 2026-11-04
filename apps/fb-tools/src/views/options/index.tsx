@@ -17,18 +17,17 @@ function OptionsLoading() {
 
 export function OptionsView() {
   const { isLoaded, isSignedIn, user } = useUser()
-  const [claimState, setClaimState] = useState<
-    "pending" | "ok" | "blocked" | null
-  >(null)
+  // Result of the device claim for a specific user id; stale results for
+  // other users are ignored during render.
+  const [claim, setClaim] = useState<{ userId: string; ok: boolean } | null>(
+    null
+  )
 
   useEffect(() => {
-    if (!isSignedIn || !user) {
-      setClaimState(null)
-      return
-    }
+    if (!isSignedIn || !user) return
     let cancelled = false
     void ensureDeviceClaimed(user).then((ok) => {
-      if (!cancelled) setClaimState(ok ? "ok" : "blocked")
+      if (!cancelled) setClaim({ userId: user.id, ok })
     })
     return () => {
       cancelled = true
@@ -37,9 +36,8 @@ export function OptionsView() {
 
   if (!isLoaded) return <OptionsLoading />
   if (!isSignedIn || !user) return <SignInView />
-  if (claimState === null || claimState === "pending") {
-    return <OptionsLoading />
-  }
-  if (claimState === "blocked") return <DeviceBlockedView centered />
+  const claimOk = claim && claim.userId === user.id ? claim.ok : null
+  if (claimOk === null) return <OptionsLoading />
+  if (!claimOk) return <DeviceBlockedView centered />
   return <SignedInCard email={user.primaryEmailAddress?.emailAddress ?? null} />
 }

@@ -1,5 +1,3 @@
-import { browser } from "wxt/browser"
-
 import { storage } from "wxt/utils/storage"
 
 // Each account is locked to a single browser profile. A random id is
